@@ -219,7 +219,11 @@ class Image_(object):
         This function does not work with the umbrella sampling mode (since it doesn't require checking)
         """
         
-        input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sbatch'.format(status= self.status)
+        if Image_.js['cluster'] == 'midway2':
+            input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sbatch'.format(status= self.status)
+        elif Image_.js['cluster'] == 'wynton-GPU':
+            input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sh'.format(status= self.status)
+        
         output_file_names_space= '{status:s}.tpr {status:s}.err {status:s}.out {status:s}.dat'.format(status= self.status)
         
         # check that the input files exist
@@ -336,7 +340,7 @@ class Image_(object):
         
         self.M= np.eye(dim)
         
-    def run(self, itr, itr_img_dir, equil_multiplier, US_step= 0):
+    def run(self, itr, itr_img_dir, equil_multiplier, US_step= 0, first_equil= False):
         """
         Generate and manage a job
         
@@ -345,6 +349,9 @@ class Image_(object):
         
         times= {}
         times['pull+equil']= np.array([Image_.js['pull_t'], Image_.js['equil_t']])
+        # use a longer pull+equil time if it is the first equiliration run of the first iteration
+        if first_equil == True: times['pull+equil']*= Image_.js['first_equil_multiplier']
+            
         times['relax+burn+sample']= np.array([Image_.js['relax_t'], Image_.js['burn_t'], Image_.js['sample_t']])
         try:
             times['umbrella']= 1000*np.array([Image_.js['US_t']]) # convert US_t (unit: ns) to ps
@@ -361,10 +368,10 @@ class Image_(object):
             # return kappa to normal at the end of equilibration
             if (self.exchanged_index != self.index) and (equil_multiplier < 1.): final_kappa= init_kappa/Image_.js['RE_equil_multiplier']
             
-            print('image %d: initial kappa' %self.index, flush= True)
-            print(init_kappa, flush= True)
-            print('image %d: final kappa' %self.index, flush= True)
-            print(final_kappa, flush= True)
+            #print('image %d: initial kappa' %self.index, flush= True)
+            #print(init_kappa, flush= True)
+            #print('image %d: final kappa' %self.index, flush= True)
+            #print(final_kappa, flush= True)
 
         elif self.status == 'relax+burn+sample':
             init_cntr= Image_.cntr_list[-1][self.index]
@@ -407,7 +414,7 @@ class Image_(object):
          # throw an error if the sbatch output cannot be converted to a number
         try:
             if Image_.js['cluster'] == 'midway2': job_id= int(sbatch_out[:-1])
-            elif Image_.js['cluster'] == 'wynton-GPU': job_id= int(sbatch_out[9:15]) # the OGE job manager outputs the job id in a string
+            elif Image_.js['cluster'] == 'wynton-GPU': job_id= int(sbatch_out)
         except:
             raise RuntimeError('Unable to submit job, iter_%d/img_%d' %(itr, self.index))
         os.chdir(current_dir)
@@ -438,6 +445,8 @@ class Image_(object):
         Equilibrate the system and then compute the gradient and M tensor
         """
         
+        debug= False
+
         # skip the simulation if the end points are set to be fixed
         end_points= [0, Image_.js['num_img'] - 1]
         if Image_.js['fix_endpoints'] == True and self.index in end_points:
@@ -470,7 +479,7 @@ class Image_(object):
         equil_fail_reason= 'None'
         # Iterate over the equilibration step
         while True:
-            print('image %d: equil round %d, equil limit %d' %(self.index, equilibration, Image_.js['equil_limit']), flush= True)
+            if debug: print('image %d: equil round %d, equil limit %d' %(self.index, equilibration, Image_.js['equil_limit']), flush= True)
             if equilibration > Image_.js['equil_limit']:
                 # instead of raising an error, let's simply continue
                 #raise RuntimeError('Failed to equilibrate img %d, itr %d within %d rounds due to %s failure' %(self.index, itr, Image_.js['equil_limit'], equil_fail_reason))
@@ -481,10 +490,13 @@ class Image_(object):
             self.status= 'pull+equil'
             if (self.exchanged_index != self.index) and (equilibration == 1):
                 # use a softer restraint if there was a replica exchange
-                print('image %d: equil multiplier %f' %(self.index, Image_.js['RE_equil_multiplier']), flush= True)
+                if debug: print('image %d: equil multiplier %f' %(self.index, Image_.js['RE_equil_multiplier']), flush= True)
                 self.run(itr, itr_img_dir, Image_.js['RE_equil_multiplier'])
+            elif (itr == 1) and (equilibration == 1):
+                # use a longer pull+equil time if it is the first equiliration run of the first iteration
+                self.run(itr, itr_img_dir, kappa_multiplier**equilibration, first_equil= True)
             else:
-                print('image %d: equil multiplier %f' %(self.index, kappa_multiplier**equilibration), flush= True)
+                if debug: print('image %d: equil multiplier %f' %(self.index, kappa_multiplier**equilibration), flush= True)
                 self.run(itr, itr_img_dir, kappa_multiplier**equilibration)
             
             # the structure is equilibrated if within some sigmas of center/within tessellation bound
@@ -493,29 +505,34 @@ class Image_(object):
                 dist_to_cntr= np.absolute(dist_to_cntr)
             else:
                 dist_to_cntr= np.absolute(Image_.min_abs(dist_to_cntr, dist_to_cntr + self.shift, dist_to_cntr - self.shift))
-            print('image %d: computed dist_co_cntr' %self.index, flush= True)
-            print(dist_to_cntr, flush= True)
+            if debug:
+                print('image %d: computed dist_co_cntr' %self.index, flush= True)
+                print(dist_to_cntr, flush= True)
             
             
             if Image_.js['check_sigma']:
-                print('image %d: check sigma failure' %self.index, flush= True)
                 sigmas= Image_.js['equil_tolerance']*np.sqrt(Image_.js['RT']/(kappas*kappa_multiplier))
-                print('image %d: computed sigmas' %self.index, flush= True)
-                print(sigmas, flush= True)
                 within_sigma= all([dist < sigma for dist, sigma in zip(dist_to_cntr, sigmas)])
-                print('image %d: checked distance' %self.index, flush= True)
-                print([dist < sigma for dist, sigma in zip(dist_to_cntr, sigmas)], flush= True)
+
+                if debug:
+                    print('image %d: check sigma failure' %self.index, flush= True)
+                    print('image %d: computed sigmas' %self.index, flush= True)
+                    print(sigmas, flush= True)
+                    print('image %d: checked distance' %self.index, flush= True)
+                    print([dist < sigma for dist, sigma in zip(dist_to_cntr, sigmas)], flush= True)
                 
                 if not within_sigma:
                     equilibration+= 1
                     equil_fail_reason= 'sigma'
-                    print('image %d: sigma failure; new equilibration = %d' %(self.index, equilibration), flush= True)
-                    print(sigmas, flush= True)
-                    print(dist_to_cntr, flush= True)
+
+                    if debug:
+                        print('image %d: sigma failure; new equilibration = %d' %(self.index, equilibration), flush= True)
+                        print(sigmas, flush= True)
+                        print(dist_to_cntr, flush= True)
                     continue
                     
             if Image_.js['check_tessellation']:
-                print('image %d: check tessellation failure' %self.index, flush= True)
+                if debug: print('image %d: check tessellation failure' %self.index, flush= True)
                 if self.index == 0:
                     neighbor_list= [1]
                 elif self.index == Image_.js['num_img'] - 1:
@@ -530,15 +547,16 @@ class Image_(object):
                     norm_to_neighbors= [np.linalg.norm(Image_.min_abs(dist, dist + self.shift, dist - self.shift)) for dist in dist_to_neighbors]
                 norm_to_self= np.linalg.norm(dist_to_cntr)
                 within_tessellation= all([norm_to_self < norm for norm in norm_to_neighbors])
-                print('image %d: checked tessellation' %self.index, flush= True)
-                print([norm_to_self < norm for norm in norm_to_neighbors], flush= True)
+                if debug: 
+                    print('image %d: checked tessellation' %self.index, flush= True)
+                    print([norm_to_self < norm for norm in norm_to_neighbors], flush= True)
                 if not within_tessellation:
                     equilibration+= 1
                     equil_fail_reason= 'tessellation'
-                    print('image %d: tessellation failure; new equilibration = %d' %(self.index, equilibration), flush= True)
+                    if debug: print('image %d: tessellation failure; new equilibration = %d' %(self.index, equilibration), flush= True)
                     continue
             
-            print('image %d: passed both sigma and tessellation tests' %self.index)
+            if debug: print('image %d: passed both sigma and tessellation tests' %self.index)
             break
         
         #reduce the force constant, equilibrate at the new force constant, and sample local free energy gradient
