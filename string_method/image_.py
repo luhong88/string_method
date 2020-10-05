@@ -113,6 +113,9 @@ class Image_(object):
         
         The argument US_step is only relevant for the umbrella sampling mode
         """
+
+        If (Image_.js['cluster'] == 'wynton-CPU') and Image_.js['status'] == 'umbrella':
+            raise NotImplementedError('Running umbrella sampling on Wynton CPU is not advised and not currently implemented')
         
         sbatch_settings_list=[]
         sbatch_settings_list.append('#!/bin/bash\n')
@@ -163,6 +166,22 @@ class Image_(object):
             # the module setting should be modified according to the cluster in question
             module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport OMP_NUM_THREADS=4\nexport CUDA_VISIBLE_DEVICES=$SGE_GPU\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load cuda\nmodule load mpi\nmodule load plumed\nmodule load gromacs\n'
         
+        elif Image_.js['cluster'] == 'wynton-CPU':
+            sbatch_settings_list.append('#$ -cwd\n')
+            
+            sbatch_settings_list.append('#$ -q %s\n' %Image_.js['partition'])
+            sbatch_settings_list.append('#$ -pe smp %d\n' %Image_.js['num_cores'])
+            
+            sbatch_settings_list.append('#$ -N str-%d-%03d\n' %(itr, self.index))
+            sbatch_settings_list.append('#$ -o %s.out\n#$ -e %s.out\n' %(self.status, self.status))
+            
+            sbatch_settings_list.append('#S -l h_rt=%s\n' %Image_.js['wall_time'])
+            
+            if Image_.js['exclude'] != 'None':
+                sbatch_settings_list.append('#$ -l h=%s\n' %Image_.js['exclude'])
+                
+            # the module setting should be modified according to the cluster in question
+            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/software\nexport CUDA_LIB_PATH=$CUDA_LIB_PATH:$HOME/software\nexport OMP_NUM_THREADS=$NSLOTS\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load mpi\nmodule load plumed\nmodule load gromacs\n'
         
         # combine the sbatch setting strings
         sbatch_settings= ''.join(sbatch_settings_list)
@@ -170,6 +189,7 @@ class Image_(object):
         # command for generating the tpr file
         if Image_.js['cluster'] == 'midway2': gen_tpr_head= 'mpirun -np 1'
         elif Image_.js['cluster'] == 'wynton-GPU': gen_tpr_head= ''
+        elif Image_.js['cluster'] == 'wynton-CPU': gen_tpr_head= ''
         
         if self.status == 'umbrella':
             gen_tpr_body= 'gmx_mpi grompp -f step%d_%s.mdp -o step%d_%s.tpr -c %s -p ../../../%s/%s' \
@@ -188,6 +208,7 @@ class Image_(object):
         #command for running the simulation
         if Image_.js['cluster'] == 'midway2': run_job_head= 'mpirun -np %d' %num_cpu
         elif Image_.js['cluster'] == 'wynton-GPU': run_job_head= 'mpirun -n %d' %Image_.js['num_node']
+        elif Image_.js['cluster'] == 'wynton-CPU': run_job_head= 'mpirun -n $NHOSTS' # the $NHOSTS variable should be 1
         
         if self.status == 'umbrella':
             run_job_body= 'gmx_mpi mdrun -v -deffnm step%d_%s -plumed step%d_plumed_%s.dat -dlb no' %(US_step, self.status, US_step, self.status)
@@ -196,7 +217,8 @@ class Image_(object):
         
         if Image_.js['cluster'] == 'midway2': run_job_ntomp= '-ntomp 1'
         elif Image_.js['cluster'] == 'wynton-GPU': run_job_ntomp= '-ntomp 4' # the number of CPUs used; ntomp=OMP_NUM_THREADS=4 is recommended for wynton-GPU
-        
+        elif Image_.js['cluster'] == 'wynton-CPU': run_job_ntomp= '-ntomp $NSLOTS'
+
         run_job= ' '.join([run_job_head, run_job_body, run_job_ntomp, '\n'])
         
         
@@ -204,6 +226,7 @@ class Image_(object):
         
         if Image_.js['cluster'] == 'midway2': submit_file_type= 'sbatch'
         elif Image_.js['cluster'] == 'wynton-GPU': submit_file_type= 'sh'
+        elif Image_.js['cluster'] == 'wynton-CPU': submit_file_type= 'sh'
         
         if self.status == 'umbrella':
             with open(itr_img_dir+'/step%d_%s.%s' %(US_step, self.status, submit_file_type), 'w') as outfile:
@@ -221,7 +244,7 @@ class Image_(object):
         
         if Image_.js['cluster'] == 'midway2':
             input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sbatch'.format(status= self.status)
-        elif Image_.js['cluster'] == 'wynton-GPU':
+        elif (Image_.js['cluster'] == 'wynton-GPU') or (Image_.js['cluster'] == 'wynton-CPU'):
             input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sh'.format(status= self.status)
         
         output_file_names_space= '{status:s}.tpr {status:s}.err {status:s}.out {status:s}.dat'.format(status= self.status)
@@ -247,7 +270,7 @@ class Image_(object):
             # returns an empty string if the job is done (whether failed or completed)
             if Image_.js['cluster'] == 'midway2':
                 job_is_running= os.popen('squeue -h -j %d 2>/dev/null' %job_id).read()
-            elif Image_.js['cluster'] == 'wynton-GPU':
+            elif (Image_.js['cluster'] == 'wynton-GPU') or (Image_.js['cluster'] == 'wynton-CPU'):
                 job_is_running= os.popen('qstat -j %d 2>/dev/null' %job_id).read()
             
             if not job_is_running:
@@ -273,7 +296,7 @@ class Image_(object):
                 break
             else:
                 # if a job has not finished, check that it is not hanging by checking the error message in the err file
-                # this behavior appears to have been fixed in GROMACS 2019
+                # this behavior appears to have been fixed in GROMACS 2019 and later versions
                 if os.path.isfile(itr_img_dir+'/%s.err' %self.status):
                     with open(itr_img_dir+'/%s.err' %self.status, 'r') as infile:
                         error_log= infile.read()
