@@ -114,7 +114,7 @@ class Image_(object):
         The argument US_step is only relevant for the umbrella sampling mode
         """
 
-        If (Image_.js['cluster'] == 'wynton-CPU') and Image_.js['status'] == 'umbrella':
+        if (Image_.js['cluster'] == 'wynton-CPU') and (self.status == 'umbrella'):
             raise NotImplementedError('Running umbrella sampling on Wynton CPU is not advised and not currently implemented')
         
         sbatch_settings_list=[]
@@ -144,7 +144,7 @@ class Image_(object):
             
             # the module setting should be modified according to the cluster in question
             #module_settings= '\nmodule purge\nmodule load gromacs/5.1.4-cuda-7.5+intelmpi-5.1+intel-16.0\nmodule load plumed\n'
-            module_settings= '\nmodule purge\nsource /project2/dinner/gromacs/sourceme.sh\n'
+            module_settings= '\nmodule purge\nsource /project2/dinner/gromacs/sourceme.sh\n\n'
             
         elif Image_.js['cluster'] == 'wynton-GPU':
             sbatch_settings_list.append('#$ -cwd\n')
@@ -164,16 +164,17 @@ class Image_(object):
                 sbatch_settings_list.append('#$ -l h=%s\n' %Image_.js['exclude'])
                 
             # the module setting should be modified according to the cluster in question
-            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport OMP_NUM_THREADS=4\nexport CUDA_VISIBLE_DEVICES=$SGE_GPU\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load cuda\nmodule load mpi\nmodule load plumed\nmodule load gromacs\n'
+            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport OMP_NUM_THREADS=4\nexport CUDA_VISIBLE_DEVICES=$SGE_GPU\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load cuda\nmodule load mpi\nmodule load plumed\nmodule load gromacs\n\n'
         
         elif Image_.js['cluster'] == 'wynton-CPU':
             sbatch_settings_list.append('#$ -cwd\n')
             
-            sbatch_settings_list.append('#$ -q %s\n' %Image_.js['partition'])
+            if Image_.js['partition'] != 'None':
+                sbatch_settings_list.append('#$ -q %s\n' %Image_.js['partition'])
             sbatch_settings_list.append('#$ -pe smp %d\n' %Image_.js['num_cores'])
             
             sbatch_settings_list.append('#$ -N str-%d-%03d\n' %(itr, self.index))
-            sbatch_settings_list.append('#$ -o %s.out\n#$ -e %s.out\n' %(self.status, self.status))
+            sbatch_settings_list.append('#$ -o %s.out\n#$ -e %s.err\n' %(self.status, self.status))
             
             sbatch_settings_list.append('#S -l h_rt=%s\n' %Image_.js['wall_time'])
             
@@ -181,7 +182,7 @@ class Image_(object):
                 sbatch_settings_list.append('#$ -l h=%s\n' %Image_.js['exclude'])
                 
             # the module setting should be modified according to the cluster in question
-            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/software\nexport CUDA_LIB_PATH=$CUDA_LIB_PATH:$HOME/software\nexport OMP_NUM_THREADS=$NSLOTS\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load mpi\nmodule load plumed\nmodule load gromacs\n'
+            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/software\nexport CUDA_LIB_PATH=$CUDA_LIB_PATH:$HOME/software\nexport OMP_NUM_THREADS=$NSLOTS\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load mpi\nmodule load plumed\nmodule load gromacs\n\n'
         
         # combine the sbatch setting strings
         sbatch_settings= ''.join(sbatch_settings_list)
@@ -244,7 +245,7 @@ class Image_(object):
         
         if Image_.js['cluster'] == 'midway2':
             input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sbatch'.format(status= self.status)
-        elif (Image_.js['cluster'] == 'wynton-GPU') or (Image_.js['cluster'] == 'wynton-CPU'):
+        elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'):
             input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sh'.format(status= self.status)
         
         output_file_names_space= '{status:s}.tpr {status:s}.err {status:s}.out {status:s}.dat'.format(status= self.status)
@@ -270,7 +271,7 @@ class Image_(object):
             # returns an empty string if the job is done (whether failed or completed)
             if Image_.js['cluster'] == 'midway2':
                 job_is_running= os.popen('squeue -h -j %d 2>/dev/null' %job_id).read()
-            elif (Image_.js['cluster'] == 'wynton-GPU') or (Image_.js['cluster'] == 'wynton-CPU'):
+            elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'):
                 job_is_running= os.popen('qstat -j %d 2>/dev/null' %job_id).read()
             
             if not job_is_running:
@@ -422,7 +423,7 @@ class Image_(object):
         if Image_.js['cluster'] == 'midway2':
             submit_command_head= 'sbatch --parsable '
             submit_file_type= '.sbatch'
-        elif Image_.js['cluster'] == 'wynton-GPU':
+        elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'):
             submit_command_head= 'qsub -terse '
             submit_file_type= '.sh'
         
@@ -437,7 +438,7 @@ class Image_(object):
          # throw an error if the sbatch output cannot be converted to a number
         try:
             if Image_.js['cluster'] == 'midway2': job_id= int(sbatch_out[:-1])
-            elif Image_.js['cluster'] == 'wynton-GPU': job_id= int(sbatch_out)
+            elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'): job_id= int(sbatch_out)
         except:
             raise RuntimeError('Unable to submit job, iter_%d/img_%d' %(itr, self.index))
         os.chdir(current_dir)
@@ -463,7 +464,7 @@ class Image_(object):
         
         self.img_file= '%s.gro' %self.status
         
-    def evolve(self, itr):
+    def evolve(self, queue, itr):
         """
         Equilibrate the system and then compute the gradient and M tensor
         """
@@ -592,7 +593,8 @@ class Image_(object):
         
         if Image_.js['clean_up']: self.clean_up(itr, itr_img_dir)
         
-        return self
+        #return self
+        queue.put(self)
         
     def umbrella(self, itr_for_US, US_continuation):
         """
