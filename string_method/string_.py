@@ -42,26 +42,29 @@ class String_(object):
         os.mkdir(itr_dir)
         
         # evolve the images in parallel with multiprocess
-        try:
-            jobs= []
-            result_queue= multiprocessing.Queue()
-            multiprocessing.log_to_stderr(logging.DEBUG)
-            logger= multiprocessing.get_logger()
-            logger.setLevel(logging.INFO)
-            
-            for img in self.img_list:
-                proc= multiprocessing.Process(target= img.evolve, args= (result_queue, self.itr))
-                jobs.append(proc)
-                proc.start()
-            
-            # fetch results from the queue
-            new_img_list= []
-            for proc in jobs: new_img_list.append(result_queue.get())
-            for proc in jobs: proc.join()
-            
-            self.img_list= new_img_list
-        except:
-            sys.exit('Unexpected error in img.evolve() multiprocess run')
+        jobs= []
+        result_queue= multiprocessing.Queue()
+        multiprocessing.log_to_stderr(logging.DEBUG)
+        logger= multiprocessing.get_logger()
+        logger.setLevel(logging.INFO)
+        
+        for img in self.img_list:
+            proc= multiprocessing.Process(target= img.evolve, args= (result_queue, self.itr))
+            jobs.append(proc)
+            proc.start()
+        
+        # fetch results from the queue
+        new_img_list= []
+
+        for proc in jobs:
+            new_img= result_queue.get()
+            assert not isinstance(new_img, Exception), 'Exception found in %s' %proc
+            new_img_list.append(new_img)
+
+        for proc in jobs:
+            proc.join()
+        
+        self.img_list= new_img_list
 
 
         # the following code is for concurrent.futures, which somehow doesn't work on Wynton
