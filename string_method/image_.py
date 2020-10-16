@@ -176,7 +176,7 @@ class Image_(object):
             sbatch_settings_list.append('#$ -N str-%d-%03d\n' %(itr, self.index))
             sbatch_settings_list.append('#$ -o %s.out\n#$ -e %s.err\n' %(self.status, self.status))
             
-            sbatch_settings_list.append('#S -l h_rt=%s\n' %Image_.js['wall_time'])
+            sbatch_settings_list.append('#$ -l h_rt=%s\n' %Image_.js['wall_time'])
             
             if Image_.js['exclude'] != 'None':
                 sbatch_settings_list.append('#$ -l h=%s\n' %Image_.js['exclude'])
@@ -374,7 +374,7 @@ class Image_(object):
         times= {}
         times['pull+equil']= np.array([Image_.js['pull_t'], Image_.js['equil_t']])
         # use a longer pull+equil time if it is the first equiliration run of the first iteration
-        if first_equil == True: times['pull+equil']*= Image_.js['first_equil_multiplier']
+        if first_equil == True: times['pull+equil']*= Image_.js['first_equil_t_multiplier']
             
         times['relax+burn+sample']= np.array([Image_.js['relax_t'], Image_.js['burn_t'], Image_.js['sample_t']])
         try:
@@ -389,9 +389,10 @@ class Image_(object):
             
             init_kappa= np.array([res.kappa for res in Image_.restraint_list])*equil_multiplier
             final_kappa= init_kappa
-            # return kappa to normal at the end of equilibration
+            # return kappa to normal at the end of equilibration if replica exchange
             if (self.exchanged_index != self.index) and (equil_multiplier < 1.): final_kappa= init_kappa/Image_.js['RE_equil_multiplier']
-            
+            # return kappa to normal at the end of equilibration if first time pull+equil
+            if first_equil == True: final_kappa= init_kappa*Image_.js['equil_multiplier']/Image_.js['first_equil_k_multiplier']
             #print('image %d: initial kappa' %self.index, flush= True)
             #print(init_kappa, flush= True)
             #print('image %d: final kappa' %self.index, flush= True)
@@ -516,9 +517,10 @@ class Image_(object):
                 # use a softer restraint if there was a replica exchange
                 if debug: print('image %d: equil multiplier %f' %(self.index, Image_.js['RE_equil_multiplier']), flush= True)
                 self.run(itr, itr_img_dir, Image_.js['RE_equil_multiplier'])
-            elif (itr == 1) and (equilibration == 1):
+            elif (itr == 0) and (equilibration == 1):
                 # use a longer pull+equil time if it is the first equiliration run of the first iteration
-                self.run(itr, itr_img_dir, kappa_multiplier**equilibration, first_equil= True)
+                # the kappa multiplier ('first_equil_k_multiplier') can also be set softer if necessary
+                self.run(itr, itr_img_dir, Image_.js['first_equil_k_multiplier'], first_equil= True)
             else:
                 if debug: print('image %d: equil multiplier %f' %(self.index, kappa_multiplier**equilibration), flush= True)
                 self.run(itr, itr_img_dir, kappa_multiplier**equilibration)
