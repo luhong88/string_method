@@ -58,7 +58,9 @@ class String_(object):
 
         for proc in jobs:
             new_img= result_queue.get()
-            assert not isinstance(new_img, Exception), 'Exception found in %s' %proc
+            # exceptions are passed back to the main process as the result
+            if isinstance(new_img, Exception):
+                sys.exit('%s (found in %s)' %(new_img, proc))
             new_img_list.append(new_img)
 
         for proc in jobs:
