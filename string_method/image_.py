@@ -156,7 +156,7 @@ class Image_(object):
             if self.status == 'umbrella':
                 sbatch_settings_list.append('#$ -o step%d_%s.out\n#$ -e step%d_%s.err\n' %(US_step, self.status, US_step, self.status))
             else:
-                sbatch_settings_list.append('#$ -o %s.out\n#$ -e %s.out\n' %(self.status, self.status))
+                sbatch_settings_list.append('#$ -o %s.out\n#$ -e %s.err\n' %(self.status, self.status))
             
             sbatch_settings_list.append('#S -l h_rt=%s\n' %Image_.js['wall_time'])
             
@@ -164,7 +164,7 @@ class Image_(object):
                 sbatch_settings_list.append('#$ -l h=%s\n' %Image_.js['exclude'])
                 
             # the module setting should be modified according to the cluster in question
-            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport OMP_NUM_THREADS=4\nexport CUDA_VISIBLE_DEVICES=$SGE_GPU\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load cuda\nmodule load mpi\nmodule load plumed\nmodule load gromacs\n\n'
+            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport OMP_NUM_THREADS=4\nexport CUDA_VISIBLE_DEVICES=$SGE_GPU\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load cuda\nmodule load mpi/openmpi-x86_64\nmodule load plumed\nmodule load gromacs\n\n'
         
         elif Image_.js['cluster'] == 'wynton-CPU':
             sbatch_settings_list.append('#$ -cwd\n')
@@ -182,7 +182,7 @@ class Image_(object):
                 sbatch_settings_list.append('#$ -l h=%s\n' %Image_.js['exclude'])
                 
             # the module setting should be modified according to the cluster in question
-            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/software\nexport CUDA_LIB_PATH=$CUDA_LIB_PATH:$HOME/software\nexport OMP_NUM_THREADS=$NSLOTS\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load mpi\nmodule load plumed\nmodule load gromacs\n\n'
+            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/software\nexport CUDA_LIB_PATH=$CUDA_LIB_PATH:$HOME/software\nexport OMP_NUM_THREADS=$NSLOTS\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load mpi/openmpi-x86_64\nmodule load plumed\nmodule load gromacs\n\n'
         
         # combine the sbatch setting strings
         sbatch_settings= ''.join(sbatch_settings_list)
