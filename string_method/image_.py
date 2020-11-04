@@ -442,12 +442,40 @@ class Image_(object):
             elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'): job_id= int(sbatch_out)
         except:
             raise RuntimeError('Unable to submit job, iter_%d/img_%d' %(itr, self.index))
-        os.chdir(current_dir)
         
         # if doing umbrella sampling, end the program here
         if self.status == 'umbrella': return None
         
-        self.check(itr, itr_img_dir, job_id)
+        # check if the job finishes successfully
+        # if there is a runtime error, redo the job, up to a limited number of times
+        crash_redo_limit= 5
+        current_run_count= 1
+        while True:
+            try:
+                os.chdir(current_dir)
+                self.check(itr, itr_img_dir, job_id)
+            except RuntimeError as e:
+                os.chdir(itr_img_dir)
+
+                # remove the error files
+                # this is necessary so that subsequent check() can pass
+                os.system('rm step*.pdb')
+                os.system('rm core.*')
+                os.system('rm %s.err %s.out' %(self.status, self.status))
+
+                sbatch_out= os.popen(submit_command).read()
+                if Image_.js['cluster'] == 'midway2': job_id= int(sbatch_out[:-1])
+                elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'): job_id= int(sbatch_out)
+
+                current_run_count+= 1
+                if current_run_count <= crash_redo_limit:
+                    print('Exception detected for itr %d, img %d during %s (%s). Will attempt said simulation again.' %(itr, self.index, self.status, e))
+                    continue
+                else:
+                    print('Exception detected for itr %d, img %d during %s (%s). Retry limit exceeded.' %(itr, self.index, self.status, e))
+                    raise e
+            break
+                
         
         # update image attributes
         cv_traj= self.get_cv_traj(itr_img_dir)
