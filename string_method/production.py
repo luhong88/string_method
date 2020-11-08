@@ -4,6 +4,7 @@ from .image_ import Image_
 from .string_ import String_
 import numpy as np
 import os
+import sys
 import pickle
 
 def string_production(job_settings):
@@ -30,7 +31,7 @@ def string_production(job_settings):
         print('Are you sure you do not want to check either sigma or tessellation?')
 
     # copy the job setting file into the input file folder
-    os.system('cp job_settings.py %s/%s/' %(job_settings['root_dir'], job_settings['input_dir']))
+    os.system('cp %s %s/%s/' %(sys.argv[0], job_settings['root_dir'], job_settings['input_dir']))
 
     if status == 'new':
         

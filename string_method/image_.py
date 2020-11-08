@@ -448,7 +448,7 @@ class Image_(object):
         
         # check if the job finishes successfully
         # if there is a runtime error, redo the job, up to a limited number of times
-        crash_redo_limit= 5
+        crash_redo_limit= 10
         current_run_count= 1
         while True:
             try:
