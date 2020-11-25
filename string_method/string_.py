@@ -33,7 +33,7 @@ class String_(object):
         """
         Evolve the string
         """
-        
+
         # first check if the output directory exists
         itr_dir= String_.js['output_dir']+'/iter_%d' %self.itr
         if os.path.isdir(itr_dir):
@@ -46,7 +46,7 @@ class String_(object):
         result_queue= multiprocessing.Queue()
         multiprocessing.log_to_stderr(logging.DEBUG)
         logger= multiprocessing.get_logger()
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.WARNING)
         
         for img in self.img_list:
             proc= multiprocessing.Process(target= img.evolve, args= (result_queue, self.itr))

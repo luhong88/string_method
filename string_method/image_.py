@@ -40,11 +40,12 @@ class Image_(object):
         self.shift[self.two_pi_per_lst]+= 2*np.pi
     
     
-    def write_plumed(self, init_cntr, init_kappa, final_cntr, final_kappa, time, itr_img_dir, US_step= 0):
+    def write_plumed(self, init_cntr, init_kappa, final_cntr, final_kappa, time, itr_img_dir, US_step= 0, include_restraint= True):
         """
         Write plumed input file
         
         The argument US_step is only relevant for the umbrella sampling mode
+        The argument include_straint should be true unless during no_restraint_relax mode
         """
         
         restraint_def_list= []
@@ -72,8 +73,11 @@ class Image_(object):
             print_str='\nPRINT ARG=%s STRIDE=%d FILE=step%d_%s.dat\n' %(res_name_list, Image_.js['US_plumed_STRIDE'], US_step, self.status)
         else:
             print_str='\nPRINT ARG=%s STRIDE=%d FILE=%s.dat\n' %(res_name_list, Image_.js['plumed_STRIDE'], self.status)
-            
-        output_str= Image_.group_cv_list + ''.join(restraint_def_list) + print_str
+
+        if include_restraint:
+            output_str= Image_.group_cv_list + ''.join(restraint_def_list) + print_str
+        else:
+            output_str= Image_.group_cv_list + print_str
         
         if self.status == 'umbrella':
             with open(itr_img_dir+'/step%d_plumed_%s.dat' %(US_step, self.status), 'w') as outfile: outfile.write(output_str)
@@ -328,6 +332,9 @@ class Image_(object):
         itr_dir= Image_.js['output_dir']+'/iter_%d' %itr
         cp_status= os.system('cp %s/%s.gro %s/%d.gro' %(itr_img_dir, self.status, itr_dir, self.index))
         if cp_status != 0: raise RuntimeError('Unable to copy equil image structure, itr: %d, img: %d' %(itr, self.index))
+
+        # also copy the plumed trajectory
+        os.system('cp %s/%s.dat %s/%d.dat' %(itr_img_dir, self.status, itr_dir, self.index))
         
         rm_status= os.system('rm -r %s' %itr_img_dir)
         if rm_status != 0: raise RuntimeError('Unable to delete image output folder, itr: %d, img: %d' %(itr, self.index))
@@ -372,6 +379,9 @@ class Image_(object):
         """
         
         times= {}
+
+        times['no_restraint_relax']= np.array([Image_.js['no_restraint_relax_t']])
+
         times['pull+equil']= np.array([Image_.js['pull_t'], Image_.js['equil_t']])
         # use a longer pull+equil time if it is the first equiliration run of the first iteration
         if first_equil == True: times['pull+equil']*= Image_.js['first_equil_t_multiplier']
@@ -382,8 +392,14 @@ class Image_(object):
         except KeyError:
             pass # if the umbrella sampling parameters are undefined, I'm probably not running umbrella sampling!
         
+
         # determine the initial and final cntr and kappa depending on self.status
-        if self.status == 'pull+equil':
+        if self.status == 'no_restraint_relax':
+            # the center and kappa are in truth never used for the no_restraint_relax step
+            init_cntr= final_cntr= self.current_cntr
+            init_kappa= final_kappa= np.array([res.kappa for res in Image_.restraint_list])
+
+        elif self.status == 'pull+equil':
             init_cntr= self.current_cntr
             final_cntr= Image_.cntr_list[-1][self.index]
             
@@ -410,9 +426,12 @@ class Image_(object):
             init_kappa= final_kappa= np.array([res.kappa for res in Image_.restraint_list])
             
         else:
-            raise ValueError('Unkown Image object status')
+            raise ValueError('Unknown Image object status')
         
-        self.write_plumed(init_cntr, init_kappa, final_cntr, final_kappa, times[self.status], itr_img_dir, US_step= US_step)
+        if self.status == 'no_restraint_relax':
+            self.write_plumed(init_cntr, init_kappa, final_cntr, final_kappa, times[self.status], itr_img_dir, include_restraint= False)
+        else:
+            self.write_plumed(init_cntr, init_kappa, final_cntr, final_kappa, times[self.status], itr_img_dir, US_step= US_step)
         self.write_mdp(times[self.status], itr_img_dir, US_step= US_step)
         self.write_sbatch(itr, itr_img_dir, self.img_file, US_step= US_step)
         
@@ -528,6 +547,11 @@ class Image_(object):
                     self.img_file= '../../iter_%d/img_%d/relax+burn+sample.gro' %(itr - 1, self.exchanged_index)
                 else:
                     raise RuntimeError('Cannot find the initial structure file, itr: %d, img: %d (exchanged img index: %d)' %(itr, self.index, self.exchanged_index))
+            
+
+            # first we do a short relaxation step without any restraint on the CVs
+            self.status= 'no_restraint_relax'
+            self.run(itr, itr_img_dir, 0.)
             
             equilibration= 1
             kappas= np.array([res.kappa for res in Image_.restraint_list])
