@@ -54,7 +54,7 @@ class Image_(object):
         steps= (time_with_zero/Image_.js['md_step_size']).astype(int)
         steps_acc= np.add.accumulate(steps)
         
-        for res_ind, res in enumerate(Image_.restraint_list):            
+        for res_ind, res in enumerate(Image_.restraint_list):
             restraint_def_header= '\nrestraint-%s: ...\n  MOVINGRESTRAINT\n  ARG=%s\n' %(res.name, res.name)
             
             for plumed_step, sim_time in enumerate(steps_acc):
@@ -62,7 +62,7 @@ class Image_(object):
                 kappa= init_kappa[res_ind] if plumed_step == 0 else final_kappa[res_ind]
                 
                 restraint_def_body= '  STEP%d=%d AT%d=%f KAPPA%d=%f\n' \
-                               %(plumed_step, sim_time, plumed_step, cntr, plumed_step, kappa)
+                            %(plumed_step, sim_time, plumed_step, cntr, plumed_step, kappa)
                 restraint_def_header+= restraint_def_body
             
             restraint_def= restraint_def_header+'...\n'
@@ -556,6 +556,8 @@ class Image_(object):
             equilibration= 1
             kappas= np.array([res.kappa for res in Image_.restraint_list])
             kappa_multiplier=Image_.js['equil_multiplier']
+            pass_sigma= True
+            pass_tessellation= True
             equil_fail_reason= 'None'
             # Iterate over the equilibration step
             while True:
@@ -563,7 +565,7 @@ class Image_(object):
                 if equilibration > Image_.js['equil_limit']:
                     # instead of raising an error, let's simply continue
                     #raise RuntimeError('Failed to equilibrate img %d, itr %d within %d rounds due to %s failure' %(self.index, itr, Image_.js['equil_limit'], equil_fail_reason))
-                    print('Failed to equilibrate img %d, itr %d within %d rounds due to %s failure' %(self.index, itr, Image_.js['equil_limit'], equil_fail_reason), flush= True)
+                    print(f'Failed to equilibrate img {self.index}, itr {itr} within {Image_.js["equil_limit"]} rounds due to {equil_fail_reason} failure', flush= True)
                     break
                 
                 # drag the initial structure to the center, then equilibrate at the new center
@@ -590,55 +592,86 @@ class Image_(object):
                     print('image %d: computed dist_co_cntr' %self.index, flush= True)
                     print(dist_to_cntr, flush= True)
                 
-                
-                if Image_.js['check_sigma']:
-                    sigmas= Image_.js['equil_tolerance']*np.sqrt(Image_.js['RT']/(kappas*kappa_multiplier))
-                    within_sigma= all([dist < sigma for dist, sigma in zip(dist_to_cntr, sigmas)])
+                # first check sigma
+                sigmas= Image_.js['equil_tolerance']*np.sqrt(Image_.js['RT']/(kappas*kappa_multiplier))
+                within_sigma= all([dist < sigma for dist, sigma in zip(dist_to_cntr, sigmas)])
 
+                if debug:
+                    print('image %d: check sigma failure' %self.index, flush= True)
+                    print('image %d: computed sigmas' %self.index, flush= True)
+                    print(sigmas, flush= True)
+                    print('image %d: checked distance' %self.index, flush= True)
+                    print([dist < sigma for dist, sigma in zip(dist_to_cntr, sigmas)], flush= True)
+                
+                if within_sigma:
+                    pass_sigma= True
+                else:
+                    pass_sigma= False
                     if debug:
-                        print('image %d: check sigma failure' %self.index, flush= True)
-                        print('image %d: computed sigmas' %self.index, flush= True)
+                        print('image %d: sigma failure; new equilibration = %d' %(self.index, equilibration), flush= True)
                         print(sigmas, flush= True)
-                        print('image %d: checked distance' %self.index, flush= True)
-                        print([dist < sigma for dist, sigma in zip(dist_to_cntr, sigmas)], flush= True)
-                    
-                    if not within_sigma:
-                        equilibration+= 1
-                        equil_fail_reason= 'sigma'
+                        print(dist_to_cntr, flush= True)
 
-                        if debug:
-                            print('image %d: sigma failure; new equilibration = %d' %(self.index, equilibration), flush= True)
-                            print(sigmas, flush= True)
-                            print(dist_to_cntr, flush= True)
-                        continue
-                        
-                if Image_.js['check_tessellation']:
-                    if debug: print('image %d: check tessellation failure' %self.index, flush= True)
-                    if self.index == 0:
-                        neighbor_list= [1]
-                    elif self.index == Image_.js['num_img'] - 1:
-                        neighbor_list= [Image_.js['num_img'] - 2]
-                    else:
-                        neighbor_list= [self.index - 1, self.index + 1]
-                    dist_to_neighbors= [self.current_cntr - Image_.cntr_list[-1][neighbor_ind] for neighbor_ind in neighbor_list]
-                    
-                    if self.two_pi_per_lst.size == 0:
-                        norm_to_neighbors= [np.linalg.norm(dist) for dist in dist_to_neighbors]
-                    else:
-                        norm_to_neighbors= [np.linalg.norm(Image_.min_abs(dist, dist + self.shift, dist - self.shift)) for dist in dist_to_neighbors]
-                    norm_to_self= np.linalg.norm(dist_to_cntr)
-                    within_tessellation= all([norm_to_self < norm for norm in norm_to_neighbors])
-                    if debug: 
-                        print('image %d: checked tessellation' %self.index, flush= True)
-                        print([norm_to_self < norm for norm in norm_to_neighbors], flush= True)
-                    if not within_tessellation:
-                        equilibration+= 1
-                        equil_fail_reason= 'tessellation'
-                        if debug: print('image %d: tessellation failure; new equilibration = %d' %(self.index, equilibration), flush= True)
-                        continue
+                # then check tessellation
+                if debug: print('image %d: check tessellation failure' %self.index, flush= True)
+                if self.index == 0:
+                    neighbor_list= [1]
+                elif self.index == Image_.js['num_img'] - 1:
+                    neighbor_list= [Image_.js['num_img'] - 2]
+                else:
+                    neighbor_list= [self.index - 1, self.index + 1]
+                dist_to_neighbors= [self.current_cntr - Image_.cntr_list[-1][neighbor_ind] for neighbor_ind in neighbor_list]
                 
-                if debug: print('image %d: passed both sigma and tessellation tests' %self.index)
-                break
+                if self.two_pi_per_lst.size == 0:
+                    norm_to_neighbors= [np.linalg.norm(dist) for dist in dist_to_neighbors]
+                else:
+                    norm_to_neighbors= [np.linalg.norm(Image_.min_abs(dist, dist + self.shift, dist - self.shift)) for dist in dist_to_neighbors]
+                norm_to_self= np.linalg.norm(dist_to_cntr)
+                within_tessellation= all([norm_to_self < norm for norm in norm_to_neighbors])
+                if debug: 
+                    print('image %d: checked tessellation' %self.index, flush= True)
+                    print([norm_to_self < norm for norm in norm_to_neighbors], flush= True)
+
+                if within_tessellation:
+                    pass_tessellation= True
+                else:
+                    pass_tessellation= False
+                    if debug: print('image %d: tessellation failure; new equilibration = %d' %(self.index, equilibration), flush= True)
+
+                # decision
+                if Image_.js['check_sigma'] and Image_.js['check_tessellation']:
+                    if Image_.js['check_either']:
+                        if pass_sigma or pass_tessellation:
+                            if debug: print(f'image {self.index}: passed sigma: {pass_sigma}, passed tessellation: {pass_tessellation}; pass check_either: True')
+                            break
+                    elif pass_sigma and pass_tessellation:
+                        if debug: print('image %d: passed both sigma and tessellation tests' %self.index)
+                        break
+
+                    equil_fail_reason= 'sigma and tessellation'
+                    equilibration+= 1
+                    continue
+                elif Image_.js['check_sigma']:
+                    if pass_sigma:
+                        if debug: print('image %d: passed sigma test; checked sigma only' %self.index)
+                        break
+                    else:
+                        equil_fail_reason= 'sigma'
+                        equilibration+= 1
+                        continue
+                elif Image_.js['check_tessellation']:
+                    if pass_tessellation:
+                        if debug: print('image %d: passed tessellation test; checked tessellation only' %self.index)
+                        break
+                    else:
+                        equil_fail_reason= 'tessellation'
+                        equilibration+= 1
+                        continue
+                else:
+                    if debug: print('image %d: did not check either sigma or tessellation; pass' %self.index)
+                    break
+
+
             
             #reduce the force constant, equilibrate at the new force constant, and sample local free energy gradient
             self.status= 'relax+burn+sample'; self.run(itr, itr_img_dir, kappa_multiplier**equilibration)
