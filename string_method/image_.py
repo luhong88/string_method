@@ -54,7 +54,13 @@ class Image_(object):
         steps= (time_with_zero/Image_.js['md_step_size']).astype(int)
         steps_acc= np.add.accumulate(steps)
         
-        for res_ind, res in enumerate(Image_.restraint_list):
+        if self.status == 'umbrella' and Image_.js['CV_subset'] != 'All':
+            # pick out the subset of CVs for umbrella sampling
+            active_restraint_list= [Image_.restraint_list[ind] for ind in Image_.js['CV_subset']]
+        else:
+            active_restraint_list= Image_.restraint_list
+
+        for res_ind, res in enumerate(active_restraint_list):
             restraint_def_header= '\nrestraint-%s: ...\n  MOVINGRESTRAINT\n  ARG=%s\n' %(res.name, res.name)
             
             for plumed_step, sim_time in enumerate(steps_acc):
@@ -68,7 +74,7 @@ class Image_(object):
             restraint_def= restraint_def_header+'...\n'
             restraint_def_list.append(restraint_def)
         
-        res_name_list= ','.join([res.name for res in Image_.restraint_list])
+        res_name_list= ','.join([res.name for res in active_restraint_list])
         if self.status == 'umbrella':
             print_str='\nPRINT ARG=%s STRIDE=%d FILE=step%d_%s.dat\n' %(res_name_list, Image_.js['US_plumed_STRIDE'], US_step, self.status)
         else:
@@ -423,7 +429,13 @@ class Image_(object):
             
         elif self.status == 'umbrella':
             init_cntr= final_cntr= Image_.cntr_list[itr][self.index] # the index here is correct, since the cntr_list include the initial string
-            init_kappa= final_kappa= np.array([res.kappa for res in Image_.restraint_list])
+            init_kappa= final_kappa= Image_.js['kappa_multiplier']*np.array([res.kappa for res in Image_.restraint_list])
+
+            # pick out the subset of CVs for umbrella sampling
+            if Image_.js['CV_subset'] != 'All':
+                assert isinstance(Image_.js['CV_subset'], list), 'If "CV_subset" is not "All", it should be a list.'
+                init_cntr= init_cntr[Image_.js['CV_subset']]
+                init_kappa= init_kappa[Image_.js['CV_subset']]
             
         else:
             raise ValueError('Unknown Image object status')
@@ -467,7 +479,7 @@ class Image_(object):
         
         # check if the job finishes successfully
         # if there is a runtime error, redo the job, up to a limited number of times
-        crash_redo_limit= 40
+        crash_redo_limit= 5
         current_run_count= 1
         while True:
             try:

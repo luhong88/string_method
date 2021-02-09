@@ -18,7 +18,7 @@ class String_(object):
     """
     
     js= None
-        
+                
     def __init__(self, img_list, root_dir):
         self.itr= 0
         self.img_list= img_list
@@ -28,7 +28,7 @@ class String_(object):
         
         self.two_pi_per_lst= self.img_list[0].two_pi_per_lst
         self.shift= self.img_list[0].shift
-        
+
     def evolve(self):
         """
         Evolve the string
