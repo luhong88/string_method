@@ -66,7 +66,11 @@ class String_(object):
         for proc in jobs:
             proc.join()
         
-        self.img_list= new_img_list
+        # unscramble the returned images
+        new_img_order= [img.index for img in new_img_list]
+        assert sorted(new_img_order) == list(range(num_img)), 'Some images are not returned by multiprocessing!'
+        new_img_sorted= sorted(zip(new_img_order, new_img_list))
+        self.img_list= [img[1] for img in new_img_sorted]
 
 
         # the following code is for concurrent.futures, which somehow doesn't work on Wynton
