@@ -23,7 +23,7 @@ def string_production(job_settings):
     Image_.restraint_list= restraint_list
 
     # read in the initial condition file; each row is an image, and each column is a colvar
-    cntr_list= np.loadtxt(job_settings['root_dir']+'/'+job_settings['input_dir']+'/'+job_settings['init_cond_file'])
+    cntr_list= np.loadtxt(job_settings['root_dir']+'/'+job_settings['input_dir']+'/'+job_settings['init_cond_file'], ndmin= 2)
     assert cntr_list.shape == (job_settings['num_img'], len(restraint_list)), 'Inconsistent initial condition!'
 
     #
@@ -32,6 +32,9 @@ def string_production(job_settings):
 
     # copy the job setting file into the input file folder
     os.system('cp %s %s/%s/' %(sys.argv[0], job_settings['root_dir'], job_settings['input_dir']))
+
+    if job_settings['replica_exchange'] == True:
+        raise NotImplementedError('The replica exchange code is bugged and has not been fixed yet!')
 
     if status == 'new':
         

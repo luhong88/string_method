@@ -68,7 +68,7 @@ class String_(object):
         
         # unscramble the returned images
         new_img_order= [img.index for img in new_img_list]
-        assert sorted(new_img_order) == list(range(num_img)), 'Some images are not returned by multiprocessing!'
+        assert sorted(new_img_order) == list(range(self.num_img)), 'Some images are not returned by multiprocessing!'
         new_img_sorted= sorted(zip(new_img_order, new_img_list))
         self.img_list= [img[1] for img in new_img_sorted]
 
@@ -171,10 +171,10 @@ class String_(object):
         """
         Reparametrization of the string
         """
-                
+        
         img_disp_vec= np.array([self.new_cntr[ind + 1] - self.new_cntr[ind] for ind in range(self.num_img - 1)])
         if self.two_pi_per_lst.size != 0: img_disp_vec= np.array([Image_.min_abs(disp, disp + self.shift, disp - self.shift) for disp in img_disp_vec])
-            
+        
         segment_lengths= np.array([np.linalg.norm(img_disp_vec[ind]) for ind in range(self.num_img - 1)])
         segment_length_upto= np.add.accumulate(segment_lengths)
         segment_length_upto= np.insert(segment_length_upto, 0, 0.)
