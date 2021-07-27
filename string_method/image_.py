@@ -148,7 +148,26 @@ class Image_(object):
             # the module setting should be modified according to the cluster in question
             #module_settings= '\nmodule purge\nmodule load gromacs/5.1.4-cuda-7.5+intelmpi-5.1+intel-16.0\nmodule load plumed\n'
             module_settings= '\nexport I_MPI_JOB_RESPECT_PROCESS_PLACEMENT=0\nmodule use $HOME/software/modules\nmodule load openmpi/4.0.2-intel20.4\nmodule load cuda/11.1.1\nmodule load plumed/2.7.1\nmodule load gromacs/2021.2\n\n'
+        
+        elif Image_.js['cluster'] == 'bridges2-CPU':
+            if Image_.js['account'] != 'None':
+                sbatch_settings_list.append('\n#SBATCH --account=%s\n' %Image_.js['account'])
             
+            if self.status == 'umbrella':
+                sbatch_settings_list.append('#SBATCH --job-name=%d-%03d\n#SBATCH --output=step%d_%s.out\n#SBATCH --error=step%d_%s.err\n#SBATCH --partition=%s\n#SBATCH --nodes=1\n#SBATCH --ntasks-per-node=%d\n#SBATCH --time=%s\n' \
+                                            %(itr, self.index, US_step, self.status, US_step, self.status, Image_.js['partition'], Image_.js['num_cores'], Image_.js['wall_time']))
+            else:
+                sbatch_settings_list.append('#SBATCH --job-name=%d-%03d\n#SBATCH --output=%s.out\n#SBATCH --error=%s.err\n#SBATCH --partition=%s\n#SBATCH --nodes=1\n#SBATCH --ntasks-per-node=%d\n#SBATCH --time=%s\n' \
+                                            %(itr, self.index, self.status, self.status, Image_.js['partition'], Image_.js['num_cores'], Image_.js['wall_time']))
+            if Image_.js['qos'] != 'None':
+                sbatch_settings_list.append('#SBATCH --qos=%s\n' %Image_.js['qos'])
+            if Image_.js['exclude'] != 'None':
+                sbatch_settings_list.append('#SBATCH --exclude=%s\n' %Image_.js['exclude'])
+            
+            # the module setting should be modified according to the cluster in question
+            #module_settings= '\nmodule purge\nmodule load gromacs/5.1.4-cuda-7.5+intelmpi-5.1+intel-16.0\nmodule load plumed\n'
+            module_settings= '\nexport I_MPI_JOB_RESPECT_PROCESS_PLACEMENT=0\nmodule use $HOME/software/modules\nmodule load openmpi/4.0.2-intel20.4\nmodule load cuda/11.1.1\nmodule load plumed/2.7.1\nmodule load gromacs/2021.2\n\n'
+
         elif Image_.js['cluster'] == 'wynton-GPU':
             sbatch_settings_list.append('#$ -cwd\n')
             
@@ -191,9 +210,8 @@ class Image_(object):
         sbatch_settings= ''.join(sbatch_settings_list)
         
         # command for generating the tpr file
-        if Image_.js['cluster'] == 'bridges2-GPU': gen_tpr_head= 'mpirun -np 1'
-        elif Image_.js['cluster'] == 'wynton-GPU': gen_tpr_head= ''
-        elif Image_.js['cluster'] == 'wynton-CPU': gen_tpr_head= ''
+        if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']: gen_tpr_head= 'mpirun -np 1'
+        elif Image_.js['cluster'] in ['wynton-GPU', 'wynton-CPU']: gen_tpr_head= ''
         
         if self.status == 'umbrella':
             gen_tpr_body= 'gmx_mpi grompp -f step%d_%s.mdp -o step%d_%s.tpr -c %s -p ../../../%s/%s' \
@@ -211,6 +229,7 @@ class Image_(object):
         
         #command for running the simulation
         if Image_.js['cluster'] == 'bridges2-GPU': run_job_head= 'mpirun -np %d' %Image_.js['num_cores'] if Image_.js['num_cores'] == 1 else 'mpirun --oversubscribe -np %d' %Image_.js['num_cores']
+        elif Image_.js['cluster'] == 'bridges2-CPU': run_job_head= 'mpirun -np %d' %Image_.js['num_cores']
         elif Image_.js['cluster'] == 'wynton-GPU': run_job_head= 'mpirun -n %d' %Image_.js['num_node']
         elif Image_.js['cluster'] == 'wynton-CPU': run_job_head= 'mpirun -n $NHOSTS' # the $NHOSTS variable should be 1
         
@@ -220,6 +239,7 @@ class Image_(object):
             run_job_body= 'gmx_mpi mdrun -v -deffnm %s -plumed plumed_%s.dat -dlb no' %(self.status, self.status)
         
         if Image_.js['cluster'] == 'bridges2-GPU': run_job_ntomp= '-ntomp 4'
+        elif Image_.js['cluster'] == 'bridges2-CPU': run_job_ntomp= '-ntomp 1'
         elif Image_.js['cluster'] == 'wynton-GPU': run_job_ntomp= '-ntomp 4' # the number of CPUs used; ntomp=OMP_NUM_THREADS=4 is recommended for wynton-GPU
         elif Image_.js['cluster'] == 'wynton-CPU': run_job_ntomp= '-ntomp $NSLOTS'
 
@@ -228,9 +248,8 @@ class Image_(object):
         
         sbatch_str= ''.join([sbatch_settings, module_settings, gen_tpr, run_job])
         
-        if Image_.js['cluster'] == 'bridges2-GPU': submit_file_type= 'sbatch'
-        elif Image_.js['cluster'] == 'wynton-GPU': submit_file_type= 'sh'
-        elif Image_.js['cluster'] == 'wynton-CPU': submit_file_type= 'sh'
+        if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']: submit_file_type= 'sbatch'
+        elif Image_.js['cluster'] in ['wynton-GPU', 'wynton-CPU']: submit_file_type= 'sh'
         
         if self.status == 'umbrella':
             with open(itr_img_dir+'/step%d_%s.%s' %(US_step, self.status, submit_file_type), 'w') as outfile:
@@ -246,7 +265,7 @@ class Image_(object):
         This function does not work with the umbrella sampling mode (since it doesn't require checking)
         """
         
-        if Image_.js['cluster'] == 'bridges2-GPU':
+        if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']:
             input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sbatch'.format(status= self.status)
         elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'):
             input_file_names_space= 'plumed_{status:s}.dat {status:s}.mdp {status:s}.sh'.format(status= self.status)
@@ -272,7 +291,7 @@ class Image_(object):
             #job_completed= 'COMPLETED' in job_status
             
             # returns an empty string if the job is done (whether failed or completed)
-            if Image_.js['cluster'] == 'bridges2-GPU':
+            if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']:
                 job_is_running= os.popen('squeue -h -j %d 2>/dev/null' %job_id).read()
             elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'):
                 job_is_running= os.popen('qstat -j %d 2>/dev/null' %job_id).read()
@@ -445,7 +464,7 @@ class Image_(object):
         os.chdir(itr_img_dir)
         
         # generate the submit command
-        if Image_.js['cluster'] == 'bridges2-GPU':
+        if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']:
             submit_command_head= 'sbatch --parsable '
             submit_file_type= '.sbatch'
         elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'):
@@ -462,7 +481,7 @@ class Image_(object):
         
          # throw an error if the sbatch output cannot be converted to a number
         try:
-            if Image_.js['cluster'] == 'bridges2-GPU': job_id= int(sbatch_out[:-1])
+            if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']: job_id= int(sbatch_out[:-1])
             elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'): job_id= int(sbatch_out)
         except:
             raise RuntimeError('Unable to submit job, iter_%d/img_%d' %(itr, self.index))
@@ -488,7 +507,7 @@ class Image_(object):
                 os.system('rm %s.err %s.out' %(self.status, self.status))
 
                 sbatch_out= os.popen(submit_command).read()
-                if Image_.js['cluster'] == 'bridges2-GPU': job_id= int(sbatch_out[:-1])
+                if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']: job_id= int(sbatch_out[:-1])
                 elif Image_.js['cluster'] in ('wynton-GPU', 'wynton-CPU'): job_id= int(sbatch_out)
 
                 current_run_count+= 1
