@@ -210,7 +210,7 @@ class Image_(object):
         sbatch_settings= ''.join(sbatch_settings_list)
         
         # command for generating the tpr file
-        if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']: gen_tpr_head= 'mpirun -np 1'
+        if Image_.js['cluster'] in ['bridges2-GPU', 'bridges2-CPU']: gen_tpr_head= 'mpirun --bind-to core:overload-allowed -np 1'
         elif Image_.js['cluster'] in ['wynton-GPU', 'wynton-CPU']: gen_tpr_head= ''
         
         if self.status == 'umbrella':
@@ -229,7 +229,7 @@ class Image_(object):
         
         #command for running the simulation
         if Image_.js['cluster'] == 'bridges2-GPU': run_job_head= 'mpirun -np %d' %Image_.js['num_cores'] if Image_.js['num_cores'] == 1 else 'mpirun --oversubscribe -np %d' %Image_.js['num_cores']
-        elif Image_.js['cluster'] == 'bridges2-CPU': run_job_head= 'mpirun -np %d' %Image_.js['num_cores']
+        elif Image_.js['cluster'] == 'bridges2-CPU': run_job_head= 'mpirun --bind-to core:overload-allowed -np %d' %Image_.js['num_cores']
         elif Image_.js['cluster'] == 'wynton-GPU': run_job_head= 'mpirun -n %d' %Image_.js['num_node']
         elif Image_.js['cluster'] == 'wynton-CPU': run_job_head= 'mpirun -n $NHOSTS' # the $NHOSTS variable should be 1
         
