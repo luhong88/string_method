@@ -186,7 +186,7 @@ class Image_(object):
                 sbatch_settings_list.append('#$ -l h=%s\n' %Image_.js['exclude'])
                 
             # the module setting should be modified according to the cluster in question
-            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport OMP_NUM_THREADS=4\nexport CUDA_VISIBLE_DEVICES=$SGE_GPU\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load cuda/11.0\nmodule load mpi/openmpi3-x86_64\nmodule load plumed/2.7.1\nmodule load gromacs/2021.2\n\n'
+            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport OMP_NUM_THREADS=4\nexport CUDA_VISIBLE_DEVICES=$SGE_GPU\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load cuda/11.0\nmodule load mpi/openmpi3-x86_64\nmodule load plumed/2.7.1\nmodule load gromacs/2021.2\n\necho $HOSTNAME\n\n'
         
         elif Image_.js['cluster'] == 'wynton-CPU':
             sbatch_settings_list.append('#$ -cwd\n')
@@ -204,7 +204,7 @@ class Image_(object):
                 sbatch_settings_list.append('#$ -l h=%s\n' %Image_.js['exclude'])
                 
             # the module setting should be modified according to the cluster in question
-            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/software\nexport CUDA_LIB_PATH=$CUDA_LIB_PATH:$HOME/software\nexport OMP_NUM_THREADS=$NSLOTS\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load mpi/openmpi3-x86_64\nmodule load plumed/2.7.1\nmodule load gromacs/2021.2\n\n'
+            module_settings= '\nexport GMX_MAXBACKUP=-1\nexport PATH=$PATH:$HOME/.local/bin\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/software\nexport CUDA_LIB_PATH=$CUDA_LIB_PATH:$HOME/software\nexport OMP_NUM_THREADS=$NSLOTS\n\nmodule use $HOME/software/modules\nmodule purge\nmodule load mpi/openmpi3-x86_64\nmodule load plumed/2.7.1\nmodule load gromacs/2021.2\n\necho $HOSTNAME\n\n'
         
         # combine the sbatch setting strings
         sbatch_settings= ''.join(sbatch_settings_list)
