@@ -35,9 +35,10 @@ class Image_(object):
         self.M= None
         
         per_lst= np.asarray([res.per for res in Image_.restraint_list])
-        self.two_pi_per_lst= np.where(per_lst == '2pi')[0]
+        self.two_pi_per_lst= np.where(per_lst != 'inf')[0]
         self.shift= np.zeros_like(Image_.cntr_list[0][0])
-        self.shift[self.two_pi_per_lst]+= 2*np.pi
+        for cv in self.two_pi_per_lst:
+            self.shift[cv]+= float(per_lst[cv])
     
     
     def write_plumed(self, init_cntr, init_kappa, final_cntr, final_kappa, time, itr_img_dir, US_step= 0, include_restraint= True):
